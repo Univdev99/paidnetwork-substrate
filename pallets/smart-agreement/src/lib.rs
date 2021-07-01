@@ -17,8 +17,8 @@ mod benchmarking;
 
 #[frame_support::pallet]
 pub mod pallet {
-	use frame_support::{dispatch::DispatchResult, pallet_prelude::*};
 	use frame_system::pallet_prelude::*;
+	use frame_support::{dispatch::DispatchResult, pallet_prelude::*, inherent::Vec, codec::{Encode, Decode}};
 
 	/// Configure the pallet by specifying the parameters and types on which it depends.
 	#[pallet::config]
@@ -31,13 +31,26 @@ pub mod pallet {
 	#[pallet::generate_store(pub(super) trait Store)]
 	pub struct Pallet<T>(_);
 
+	#[derive(Encode, Decode, Default, Clone, PartialEq)]
+	pub struct AnchoredDocument<T: Config> {
+		file_hash: Vec<u8>,
+		proposer_account: T::AccountId,
+		proposer_did: Vec<u8>,
+		required_quorum: u128,
+		template_id: u128,
+		metadata: Vec<u8>,
+		valid_until: u128,
+		status: u8,
+		counterparty_addresses: Vec<T::AccountId>,
+		accepted_counterparties: u128,
+		declined_counterparties: u128,
+	}
+
 	// The pallet's runtime storage items.
 	// https://substrate.dev/docs/en/knowledgebase/runtime/storage
 	#[pallet::storage]
-	#[pallet::getter(fn something)]
-	// Learn more about declaring storage items:
-	// https://substrate.dev/docs/en/knowledgebase/runtime/storage#declaring-storage-items
-	pub type Something<T> = StorageValue<_, u32>;
+	#[pallet::getter(fn get_anchor)]
+	pub(super) type Anchor<T> = StorageMap<_, Twox64Concat, Vec<u8>, AnchoredDocument<T>>;
 
 	// Pallets use events to inform users when important changes are made.
 	// https://substrate.dev/docs/en/knowledgebase/runtime/events
@@ -45,18 +58,13 @@ pub mod pallet {
 	#[pallet::metadata(T::AccountId = "AccountId")]
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
 	pub enum Event<T: Config> {
-		/// Event documentation should end with an array that provides descriptive names for event
-		/// parameters. [something, who]
-		SomethingStored(u32, T::AccountId),
+		/// [proposer, proposerDid, FileHash]
+		DocumentAnchored(T::AccountId, Vec<u8>, Vec<u8>)
 	}
 
 	// Errors inform users that something went wrong.
 	#[pallet::error]
 	pub enum Error<T> {
-		/// Error names should be descriptive.
-		NoneValue,
-		/// Errors should have helpful documentation associated with them.
-		StorageOverflow,
 	}
 
 	// Dispatchable functions allows users to interact with the pallet and invoke state changes.
@@ -64,41 +72,28 @@ pub mod pallet {
 	// Dispatchable functions must be annotated with a weight and must return a DispatchResult.
 	#[pallet::call]
 	impl<T:Config> Pallet<T> {
-		/// An example dispatchable that takes a singles value as a parameter, writes the value to
-		/// storage and emits an event. This function must be dispatched by a signed extrinsic.
 		#[pallet::weight(10_000 + T::DbWeight::get().writes(1))]
-		pub fn do_something(origin: OriginFor<T>, something: u32) -> DispatchResult {
-			// Check that the extrinsic was signed and get the signer.
-			// This function will return an error if the extrinsic is not signed.
-			// https://substrate.dev/docs/en/knowledgebase/runtime/origin
+		pub fn add_document(origin: OriginFor<T>, file_hash: Vec<u8>, proposer_did: Vec<u8>) -> DispatchResult {
 			let who = ensure_signed(origin)?;
+			Self::deposit_event(Event::DocumentAnchored(who.clone(), file_hash.clone(), file_hash.clone()));
 
-			// Update storage.
-			<Something<T>>::put(something);
+			let new_document = AnchoredDocument {
+				file_hash: file_hash.clone(),
+				proposer_account: who.clone(),
+				proposer_did: proposer_did.clone(),
+				required_quorum: 0,
+				template_id: 0,
+				metadata: Vec::new(),
+				valid_until: 0,
+				status: 0,
+				counterparty_addresses: Vec::new(),
+				accepted_counterparties: 0,
+				declined_counterparties: 0
+			};
 
-			// Emit an event.
-			Self::deposit_event(Event::SomethingStored(something, who));
-			// Return a successful DispatchResultWithPostInfo
+			<Anchor<T>>::insert(proposer_did.clone(), new_document);
+
 			Ok(())
-		}
-
-		/// An example dispatchable that may throw a custom error.
-		#[pallet::weight(10_000 + T::DbWeight::get().reads_writes(1,1))]
-		pub fn cause_error(origin: OriginFor<T>) -> DispatchResult {
-			let _who = ensure_signed(origin)?;
-
-			// Read a value from storage.
-			match <Something<T>>::get() {
-				// Return an error if the value has not been set.
-				None => Err(Error::<T>::NoneValue)?,
-				Some(old) => {
-					// Increment the value read from storage; will error in the event of overflow.
-					let new = old.checked_add(1).ok_or(Error::<T>::StorageOverflow)?;
-					// Update the value in storage with the incremented result.
-					<Something<T>>::put(new);
-					Ok(())
-				},
-			}
 		}
 	}
 }
