@@ -95,6 +95,8 @@ pub mod pallet {
 	#[pallet::metadata(T::AccountId = "AccountId")]
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
 	pub enum Event<T: Config> {
+		SignatureRequested(T::AccountId, Vec<u8>),
+
 		/// [proposer, proposerDid, FileHash]
 		DocumentAnchored(T::AccountId, Vec<u8>, Vec<u8>)
 	}
@@ -114,19 +116,40 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			file_hash: Vec<u8>,
 			proposer_did: Vec<u8>,
+			required_quorum: u128,
+			template_id: u128,
+			valid_until: u128,
+			counterparty_accounts: Vec<T::AccountId>,
+			counterparty_dids: Vec<Vec<u8>>,
 			metadata: Vec<u8>
 		) -> DispatchResult {
 			let who = ensure_signed(origin)?;
-			let counterparties: Vec<T::AccountId> = Vec::new();
+			let is_same_len: bool = counterparty_accounts.len() == counterparty_dids.len();
+			ensure!(is_same_len, "Both arrays must be same length");
+
+			let mut counterparties: Vec<T::AccountId> = Vec::new();
+			let mut i = 0;
+			while i < counterparty_accounts.len() {
+				let account = counterparty_accounts[i].clone();
+				let did = counterparty_dids[i].clone();
+				<Counterparties<T>>::insert(account.clone(), Counterparty {
+					account: account.clone(),
+					did,
+					acceptance_state: AcceptanceState::Requested
+				});
+				Self::deposit_event(Event::SignatureRequested(account.clone(), file_hash.clone()));
+				counterparties.push(account.clone());
+				i = i + 1;
+			}
 
 			let new_document = AnchoredDocument {
 				file_hash: file_hash.clone(),
 				proposer_account: who.clone(),
 				proposer_did: proposer_did.clone(),
-				required_quorum: 0,
-				template_id: 0,
+				required_quorum,
+				template_id,
 				metadata: metadata.clone(),
-				valid_until: 0,
+				valid_until,
 				counterparties,
 				status: SmartAgreementState::PendingSignature,
 				accepted_counterparties: 0,
