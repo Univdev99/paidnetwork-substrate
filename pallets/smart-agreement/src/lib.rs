@@ -87,7 +87,14 @@ pub mod pallet {
 
 	#[pallet::storage]
 	#[pallet::getter(fn get_counterparty)]
-	pub(super) type Counterparties<T: Config> = StorageMap<_, Twox64Concat, T::AccountId, Counterparty<T>>;
+	pub(super) type Counterparties<T: Config> = StorageDoubleMap<
+		_,
+		Blake2_128Concat,
+		Vec<u8>,
+		Twox64Concat,
+		T::AccountId,
+		Counterparty<T>
+	>;
 
 	// Pallets use events to inform users when important changes are made.
 	// https://substrate.dev/docs/en/knowledgebase/runtime/events
@@ -132,7 +139,7 @@ pub mod pallet {
 			while i < counterparty_accounts.len() {
 				let account = counterparty_accounts[i].clone();
 				let did = counterparty_dids[i].clone();
-				<Counterparties<T>>::insert(account.clone(), Counterparty {
+				<Counterparties<T>>::insert(file_hash.clone(), account.clone(), Counterparty {
 					account: account.clone(),
 					did,
 					acceptance_state: AcceptanceState::Requested
